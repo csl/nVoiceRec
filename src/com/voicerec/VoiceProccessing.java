@@ -38,7 +38,7 @@ public class VoiceProccessing {
 	int firstset;
 
 	// ------------ User define ----------- //
-	static int SNR_TH = 10;  //0~10
+	static int SNR_TH = 5;  //0~10
 	static int	X_sampling_rate = 8000;
 	
 	static COMPLEX W_FFT[]  = null;
@@ -46,6 +46,7 @@ public class VoiceProccessing {
 	
     static short  InOverlap[] = new short[FFT_SIZE];
     static short result[] = new short[FFT_SIZE];
+    static short  InData[] = new short[FFT_SIZE];
 	
 	static double Hamming256[] = {
 		    0.0800, 0.0801, 0.0806, 0.0813, 0.0822, 0.0835, 0.0850, 0.0868, 0.0889, 0.0913,
@@ -82,6 +83,7 @@ public class VoiceProccessing {
     	{
     		result[i] = 0;
     		InOverlap[i] = 0;
+    		InData[i] = 0;
     	}
     	
     	firstset = 1;
@@ -151,7 +153,7 @@ public class VoiceProccessing {
         if ( WL == N ) return true;    
     	//if ( W_FFT != null ) delete [] W_FFT;
         W_FFT = new COMPLEX[N];
-    	for(i=0; i<FFT_SIZE2; i++)
+    	for(i=0; i<N; i++)
     	{
     		W_FFT[i] = new COMPLEX();
     	}        
@@ -238,7 +240,7 @@ public class VoiceProccessing {
     {   // ------- internal variable -------- //
     	int i,j;
     	COMPLEX ch_f[] = new COMPLEX[FFT_SIZE2];
-    	
+    	COMPLEX TmpOut[] = new COMPLEX[FFT_SIZE2];
     	double P_D[] = new double[FFT_SIZE+1];
     	double P_D_1[] = new double[FFT_SIZE+1];
     	double temp_reg = 0;
@@ -249,7 +251,7 @@ public class VoiceProccessing {
     	
     	
     	double Gain[] =  new double[FFT_SIZE+1];
-    	COMPLEX TmpOut[] = new COMPLEX[FFT_SIZE2];
+    	
 
     	Log.i(TAG, "NoiseReduction...");
     	for(i=0; i<FFT_SIZE2; i++)
@@ -264,11 +266,11 @@ public class VoiceProccessing {
     		ch_f[i].real = (double) Input[i] * Hamming256[i];
     	}
 
-    	Log.i(TAG, "before FFT...");
+    	Log.i(TAG, "before FFT..." + ch_f[0].real);
         // FFT 
     	FFT(ch_f);
 
-    	Log.i(TAG, "after FFT...");
+    	Log.i(TAG, "after FFT..."  + ch_f[0].real);
  
     	// Estimate P_D
     	if(FrameCnt < SetFrame)
@@ -352,54 +354,61 @@ public class VoiceProccessing {
     	Log.i(TAG, "Before IFFT...");
     	
     	// IFFT
-     	IFFT(ch_f, FFT_SIZE2);  
+     	IFFT(TmpOut, FFT_SIZE2);  
 	
     	// Overlap half frame
         for(i=0;i<FFT_SIZE;i++) 
     	{   
         	//Log.i(TAG,  i + " ," + Double.toString(ch_f[i].real) + "," + Short.toString(Overlap[i]));
-        	result[i] = (short) (ch_f[i].real + Overlap[i]);
-            Overlap[i] = (short) ch_f[i+FFT_SIZE].real;   
+        	result[i] = (short)(TmpOut[i].real+Overlap[i]);
+            Overlap[i] = (short)TmpOut[i+FFT_SIZE].real;
     	}
 
     	if(FrameCnt<SetFrame)
     		FrameCnt++;  
     	
-    	Log.i(TAG, "after FFT_SIZE...");
+    	
     } 
-    
-
     
     public void proccess_running(short[] voice_data, int Sizes, DataOutputStream dos)
     {
-    	short  InData[] = new short[FFT_SIZE];
+    	
     	short ch[] = new short[FFT_SIZE2];
 
     	Log.i(TAG, "proccess_running...");
     	
     	for (int i=0; i<voice_data.length; i+=FFT_SIZE)
 		{	
-			for(int j=0;j<FFT_SIZE;j++)
-			{	// Read data from input wav file
-				try
-				{
-					InData[j] = voice_data[i + j];
-				}
-				catch (Exception x)
-				{
-					InData[j] = 0;
-					Log.i(TAG, Integer.toString(j));
-				}
-			}
-			
+    		
 			if (firstset == 1)
 			{
+				Log.i(TAG, "excute....once");
 				firstset = 0;
 				for(int j=0;j<FFT_SIZE;j++)
 				{	
-					InOverlap[j] = voice_data[i + FFT_SIZE + j];
+					InOverlap[j] = voice_data[i +  j];
+				}
+				for(int j=0;j<FFT_SIZE;j++)
+				{	
+					InData[j] = voice_data[i + FFT_SIZE + j];
 				}
 			}
+			else
+			{
+				for(int j=0;j<FFT_SIZE;j++)
+				{	// Read data from input wav file
+					try
+					{
+						InData[j] = voice_data[i + j];
+					}
+					catch (Exception x)
+					{
+						InData[j] = 0;
+						Log.i(TAG, "space, index= " + Integer.toString(j));
+					}
+				}
+			}
+
 		
 			// STFT process
 			//memcpy(&ch[0],InOverlap,CpySize);
@@ -448,7 +457,8 @@ public class VoiceProccessing {
 					e.printStackTrace();
 				}
 			}
-
+			
+			result = new short[FFT_SIZE];
 			//InCnt = InCnt+FFT_SIZE;
 			//if(InCnt%X_sampling_rate==0)
 				//printf(".");

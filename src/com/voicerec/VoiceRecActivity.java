@@ -154,7 +154,7 @@ public class VoiceRecActivity extends Activity
               myButton1.setEnabled(false);
               myButton2.setEnabled(true);
               myButton3.setEnabled(false);
-
+              myButton4.setEnabled(false);
               isStopRecord = false;
               
               Log.i(TAG, "finish.....");
@@ -173,7 +173,7 @@ public class VoiceRecActivity extends Activity
               myButton2.setEnabled(false);
               myButton3.setEnabled(true);
               myButton1.setEnabled(true);              
-
+              myButton4.setEnabled(true);     
               isStopRecord = true;
             
           }
@@ -218,16 +218,31 @@ public class VoiceRecActivity extends Activity
           					
           	 	            VoiceProccessing vp = new VoiceProccessing();
           		            int bufferSize = AudioTrack.getMinBufferSize(frequency, channelConfiguration, audioEncoding);
-          		            short[] audiodata = new short[bufferSize];
+          		            short[] audiodata = new short[VoiceProccessing.FFT_SIZE];
+          		            short[] maudiodata = new short[VoiceProccessing.FFT_SIZE2];
           	                try {
+          	                	int flag=0;
           						while (dis.available() > 0) 
           						{
           						      int i = 0;
-          						      while (dis.available() > 0 && i < audiodata.length) {
-          						        audiodata[i] = dis.readShort();
-          						        i++;
+          						      if (flag == 1)
+          						      {
+          						        while (dis.available() > 0 && i < audiodata.length) 
+          						        {
+          						          audiodata[i] = dis.readShort();
+          						          i++;
+          						        }
+          						        vp.proccess_running(audiodata, audiodata.length, dos);
           						      }
-          						      vp.proccess_running(audiodata, audiodata.length, dos);
+          						      else
+          						      {
+          						    	  flag = 0;
+            						      while (dis.available() > 0 && i < maudiodata.length) {
+            						        	maudiodata[i] = dis.readShort();
+                						          i++;
+                						  }
+                						  vp.proccess_running(maudiodata, maudiodata.length, dos);
+          						      }
           						}
           						dis.close();  
           						dos.close();  
@@ -385,9 +400,20 @@ public class VoiceRecActivity extends Activity
     
 	    private class RecordAudio extends AsyncTask<Void, Integer, Void> {
 	        @Override
-	        protected Void doInBackground(Void... params) {
+	        protected Void doInBackground(Void... params) 
+	        {
 	          isRecording = true;
-	          FileOutputStream  dos;
+	          //FileOutputStream  dos;
+	          OutputStream os = null;
+			try {
+				os = new FileOutputStream(myRecAudioFile);
+			} catch (FileNotFoundException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+	          BufferedOutputStream bos = new BufferedOutputStream(os);
+	          DataOutputStream dos = new DataOutputStream(bos);
+	          
 	          try {
 	        	  
 	        	if (audioRecord != null)
@@ -397,7 +423,7 @@ public class VoiceRecActivity extends Activity
 	        	
 	        	Log.i(TAG, "start rec...");
 	        	
-	             dos = new FileOutputStream(myRecAudioFile);
+	            //dos = new FileOutputStream(myRecAudioFile);
 	            
 	            int bufferSize = AudioRecord.getMinBufferSize(frequency,
 	                channelConfiguration, audioEncoding);
@@ -409,7 +435,7 @@ public class VoiceRecActivity extends Activity
 	                channelConfiguration, audioEncoding, bufferSize);
 	            Log.i(TAG, "start rec2...");
 	            
-	            byte [] buffer = new byte [bufferSize];
+	            short [] buffer = new short [bufferSize];
 	            audioRecord.startRecording();
 	            int r = 0;
 	            Log.i(TAG, "start rec4...bufferSize" + bufferSize);
@@ -421,13 +447,16 @@ public class VoiceRecActivity extends Activity
 
 	              if (AudioRecord.ERROR_INVALID_OPERATION != bufferReadResult) { 
 						try {
-							  dos.write(buffer);
+			                for (int i = 0; i < bufferReadResult; i++) 
+			                {
+			                    dos.writeShort(buffer[i]);
+			                }
 						} catch (IOException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
 	              }
-	              Log.i(TAG, "proccess_running finish...");
+	              //Log.i(TAG, "proccess_running finish...");
 
 	              publishProgress(new Integer(r));
 	              r++;
