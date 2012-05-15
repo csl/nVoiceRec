@@ -15,6 +15,7 @@ import java.util.ArrayList;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -27,6 +28,8 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -47,6 +50,10 @@ public class VoiceRecActivity extends Activity
 	  private Button myButton2;
 	  private Button myButton3;
 	  private Button myButton4;
+	  
+      private static final int MSG_SET_PLAYSTATUS = 1;  
+	  private static final int MSG_SET_PLAYSTATUS2 = 2;
+	  
 
 	  private String strTempFile = "VoiceRec";
 	  private String TAG = "VoiceRec";
@@ -66,25 +73,13 @@ public class VoiceRecActivity extends Activity
 	  private static final int MENU_EXIT = Menu.FIRST;
 	  private AlertDialog.Builder builder;
 	  AudioRecord audioRecord;
-
- 	  double mn = 0.0;
-	  double sgm = 1.0;
-	  long s = 13278;
+	  private ProgressDialog myDialog;
 	  RecordAudio recordTask;
 	  PlayAudio playTask;
-	  double e = 0;
-	  double signal[];
-	  double noise[];
-	  double sig_n[];
-	  double sig_wiener[];
-      double rxx [];
-      double rdx[];
-      double h[];
-	  double a[]={1.0,-0.1,-0.8};
- 	  double b[]={1.0};
- 	  
-	  boolean isRecording = false,isPlaying = false;
 
+	  int play_file = 0;
+	  boolean isRecording = false,isPlaying = false;
+	  
 	  int frequency = 8000; //8k
 	  int channelConfiguration = AudioFormat.CHANNEL_CONFIGURATION_MONO;
 	  int audioEncoding = AudioFormat.ENCODING_PCM_16BIT;
@@ -98,11 +93,16 @@ public class VoiceRecActivity extends Activity
         myButton1 = (Button) findViewById(R.id.ImageButton01);
         myButton2 = (Button) findViewById(R.id.ImageButton02);
         myButton3 = (Button) findViewById(R.id.ImageButton03);
+        myButton4 = (Button) findViewById(R.id.ImageButton04);
+        
         myTextView1 = (TextView) findViewById(R.id.TextView01);
 
         myButton2.setEnabled(false);
         myButton3.setEnabled(false);
-    
+
+    	myRecAudioFile = null;
+	    myRecOutPutAudioFile = null;
+        
         sdCardExit = Environment.getExternalStorageState().equals(
             android.os.Environment.MEDIA_MOUNTED);
 
@@ -128,16 +128,25 @@ public class VoiceRecActivity extends Activity
               
               Log.i(TAG, "Rec start.....");
 
+              if (myRecAudioFile != null && myRecOutPutAudioFile != null)
+              {
+            	  myRecAudioFile.setWritable(true);
+            	  myRecAudioFile.delete();
+            	  myRecOutPutAudioFile.setWritable(true);
+            	  myRecOutPutAudioFile.delete();
+            	  myRecAudioFile = null;
+            	  myRecOutPutAudioFile = null;
+              }
+              
                File path = new File(
             	        Environment.getExternalStorageDirectory() + "/");
                path.mkdirs();
                try {
             	    	myRecAudioFile = File.createTempFile("recording", ".pcm", path);
-            	    	myRecOutPutAudioFile = File.createTempFile("recording", ".pcm", path);
                } catch (IOException e) {
             	      throw new RuntimeException("Couldn't create file on SD card", e);
                }              
-
+               
               record();
               
               myTextView1.setText("record....");
@@ -172,53 +181,77 @@ public class VoiceRecActivity extends Activity
         
         myButton3.setOnClickListener(new Button.OnClickListener()
         {
-      
           public void onClick(View arg0)
           {
         	  if (myButton3.getText().toString().equals("Play"))
         	  {
-        		DataInputStream dis;
-        		DataOutputStream dos;
+        	    if (myRecOutPutAudioFile == null)
+        	    {
+                    //Progress
+                    myDialog = ProgressDialog.show
+                    (
+                        VoiceRecActivity.this,
+                        "reduce noise",
+                        "please wait...",
+                        true
+                    );
+                    
+                    new Thread()
+                    {
+                      public void run()
+                      {
+                          File path = new File(
+                        	        Environment.getExternalStorageDirectory() + "/");
+                           path.mkdirs();
+                           try {
+                        	    	myRecOutPutAudioFile = File.createTempFile("recording", ".pcm", path);
+                           } catch (IOException e) {
+                        	      throw new RuntimeException("Couldn't create file on SD card", e);
+                           }              
 
-				try {
-					dis = new DataInputStream(new BufferedInputStream(new FileInputStream(myRecAudioFile)));
-					dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(myRecOutPutAudioFile)));
-					
-	 	            VoiceProccessing vp = new VoiceProccessing();
-		            int bufferSize = AudioTrack.getMinBufferSize(frequency,channelConfiguration, audioEncoding);
-		            short[] audiodata = new short[VoiceProccessing.FFT_SIZE2];
-	                try {
-						while (dis.available() > 0) 
-						{
+                        DataInputStream dis;
+                  		DataOutputStream dos;
 
-						      int i = 0;
-						      while (dis.available() > 0 && i < audiodata.length) {
-						        audiodata[i] = dis.readShort();
-						        i++;
-						      }
-						      vp.proccess_running(audiodata, audiodata.length, dos);
-						      
-						      //audioTrack.write(audiodata, 0, audiodata.length);
-						}
-						
-						dis.close();  
-						dos.close();  
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-	        		  
-	        						
-					
-					
-				} catch (FileNotFoundException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}  
-        		  
- 
-        		play(); 
-        		  myButton3.setText("Stop");
+          				try {
+          					dis = new DataInputStream(new BufferedInputStream(new FileInputStream(myRecAudioFile)));
+          					dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(myRecOutPutAudioFile)));
+          					
+          	 	            VoiceProccessing vp = new VoiceProccessing();
+          		            int bufferSize = AudioTrack.getMinBufferSize(frequency, channelConfiguration, audioEncoding);
+          		            short[] audiodata = new short[bufferSize];
+          	                try {
+          						while (dis.available() > 0) 
+          						{
+          						      int i = 0;
+          						      while (dis.available() > 0 && i < audiodata.length) {
+          						        audiodata[i] = dis.readShort();
+          						        i++;
+          						      }
+          						      vp.proccess_running(audiodata, audiodata.length, dos);
+          						}
+          						dis.close();  
+          						dos.close();  
+          					} catch (IOException e) {
+          						// TODO Auto-generated catch block
+          						e.printStackTrace();
+          					}
+          					
+          				} catch (FileNotFoundException e) {
+          					// TODO Auto-generated catch block
+          					e.printStackTrace();
+          				}  
+           
+                  	    play_file = 1;
+                  		play(); 
+                   	  
+                        myDialog.dismiss();
+                      }
+                    }.start();
+        	    }
+        	    
+          	    play_file = 1;
+          		play();        	    
+        		myButton3.setText("Stop");
         	  }
         	  else
         	  {
@@ -226,7 +259,26 @@ public class VoiceRecActivity extends Activity
         		  stopPlaying();
         	  }
           }
+        });
+
+        myButton4.setOnClickListener(new Button.OnClickListener()
+        {
+          public void onClick(View arg0)
+          {
+        	  if (myButton3.getText().toString().equals("Play"))
+        	  {
+        		play_file = 2;
+        		play(); 
+        		myButton4.setText("Stop");
+        	  }
+        	  else
+        	  {
+        		  myButton4.setText("Play");
+        		  stopPlaying();
+        	  }
+          }
         });        
+        
     }
 
 	   public boolean onKeyDown(int keyCode, KeyEvent event)
@@ -335,7 +387,7 @@ public class VoiceRecActivity extends Activity
 	        @Override
 	        protected Void doInBackground(Void... params) {
 	          isRecording = true;
-	          DataOutputStream dos;
+	          FileOutputStream  dos;
 	          try {
 	        	  
 	        	if (audioRecord != null)
@@ -345,9 +397,7 @@ public class VoiceRecActivity extends Activity
 	        	
 	        	Log.i(TAG, "start rec...");
 	        	
-	             dos = new DataOutputStream(
-	                new BufferedOutputStream(new FileOutputStream(
-	                		myRecAudioFile)));
+	             dos = new FileOutputStream(myRecAudioFile);
 	            
 	            int bufferSize = AudioRecord.getMinBufferSize(frequency,
 	                channelConfiguration, audioEncoding);
@@ -359,30 +409,24 @@ public class VoiceRecActivity extends Activity
 	                channelConfiguration, audioEncoding, bufferSize);
 	            Log.i(TAG, "start rec2...");
 	            
-	            short[] buffer = new short[bufferSize];
+	            byte [] buffer = new byte [bufferSize];
 	            audioRecord.startRecording();
 	            int r = 0;
-	            Log.i(TAG, "start rec4...");
+	            Log.i(TAG, "start rec4...bufferSize" + bufferSize);
 	            
 	            while (isRecording) 
 	            {
-	            	Log.i(TAG, "start rec5...");
-	            	
 	              int bufferReadResult = audioRecord.read(buffer, 0,
 	                  bufferSize);
 
-	  			for (int k=0; k<bufferReadResult ; k++)
-				{
-					try {
-						//Log.i(TAG, Short.toString(result[k]));
-						dos.writeShort(buffer[k]);
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				}
-
-           
+	              if (AudioRecord.ERROR_INVALID_OPERATION != bufferReadResult) { 
+						try {
+							  dos.write(buffer);
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+	              }
 	              Log.i(TAG, "proccess_running finish...");
 
 	              publishProgress(new Integer(r));
@@ -402,14 +446,20 @@ public class VoiceRecActivity extends Activity
 
 	    private class PlayAudio extends AsyncTask<Void, Integer, Void> {
 	            @Override
-	            protected Void doInBackground(Void... params) {
+	            protected Void doInBackground(Void... params) 
+	            {
 	              isPlaying = true;
 
 	              int bufferSize = AudioTrack.getMinBufferSize(frequency,channelConfiguration, audioEncoding);
 	              short[] audiodata = new short[bufferSize / 4];
 
 	              try {
-	                DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(myRecOutPutAudioFile)));
+	            	DataInputStream dis = null;
+	            	if (play_file == 1)
+	            		dis = new DataInputStream(new BufferedInputStream(new FileInputStream(myRecOutPutAudioFile)));
+	            	else
+	            		dis = new DataInputStream(new BufferedInputStream(new FileInputStream(myRecAudioFile)));
+	            	
 	                AudioTrack audioTrack = new AudioTrack(
 	                    AudioManager.STREAM_MUSIC, frequency,
 	                    channelConfiguration, audioEncoding, bufferSize,
@@ -425,8 +475,19 @@ public class VoiceRecActivity extends Activity
 	                  audioTrack.write(audiodata, 0, audiodata.length);
 	                }
 	                dis.close();
-	                //myButton3.setText("Play");
-	                //this.cancel(true);
+	                
+					Message cmsg = new Message();
+	            	if (play_file == 1)
+	            	{
+						cmsg.what = MSG_SET_PLAYSTATUS;
+						myHandler.sendMessage(cmsg);
+	            	}
+	            	else
+	            	{
+						cmsg.what = MSG_SET_PLAYSTATUS2;
+						myHandler.sendMessage(cmsg);
+	            	}
+	                
 	              } catch (Exception e) {
 		        	  e.printStackTrace();
 		          }
@@ -434,7 +495,21 @@ public class VoiceRecActivity extends Activity
 	            }
 	    }	       
 	
-
+		  public Handler myHandler = new Handler(){
+			    public void handleMessage(Message msg) {
+			        switch(msg.what)
+			        {
+			          case MSG_SET_PLAYSTATUS:
+		        		  myButton3.setText("Play");
+		                  break;
+			          case MSG_SET_PLAYSTATUS2:
+		        		  myButton4.setText("Play");
+			              break;
+			        }
+			        
+			        super.handleMessage(msg);
+			    }
+			};  
 	  
 
 }
