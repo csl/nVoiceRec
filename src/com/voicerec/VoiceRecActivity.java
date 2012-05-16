@@ -102,7 +102,7 @@ public class VoiceRecActivity extends Activity
 
     	myRecAudioFile = null;
 	    myRecOutPutAudioFile = null;
-        
+	    
         sdCardExit = Environment.getExternalStorageState().equals(
             android.os.Environment.MEDIA_MOUNTED);
 
@@ -110,6 +110,9 @@ public class VoiceRecActivity extends Activity
         {
           myRecAudioDir = Environment.getExternalStorageDirectory();
         }
+        
+       //myRecAudioFile = new File(
+    	      //  Environment.getExternalStorageDirectory() + "/2.pcm");
 
         //getRecordFiles();
 
@@ -213,7 +216,7 @@ public class VoiceRecActivity extends Activity
                   		DataOutputStream dos;
 
           				try {
-          					dis = new DataInputStream(new BufferedInputStream(new FileInputStream(myRecAudioFile)));
+          					dis = new DataInputStream(new FileInputStream(myRecAudioFile));
           					dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(myRecOutPutAudioFile)));
           					
           	 	            VoiceProccessing vp = new VoiceProccessing();
@@ -239,7 +242,7 @@ public class VoiceRecActivity extends Activity
           						    	  flag = 0;
             						      while (dis.available() > 0 && i < maudiodata.length) {
             						        	maudiodata[i] = dis.readShort();
-                						          i++;
+                						        i++;
                 						  }
                 						  vp.proccess_running(maudiodata, maudiodata.length, dos);
           						      }
@@ -360,15 +363,6 @@ public class VoiceRecActivity extends Activity
 		      return true ;
 	}	
 	
-	void my_sin(double a[], int N)
-	{
-		int i;
-		for(i=0 ; i<N ; i++)
-		{
-			a[i] = 5 * Math.sin(2*Math.PI*i/100);
-		}
-
-	}
 	  public void play() {
 		    //startPlaybackButton.setEnabled(true);
 
@@ -449,13 +443,16 @@ public class VoiceRecActivity extends Activity
 						try {
 			                for (int i = 0; i < bufferReadResult; i++) 
 			                {
+					            //short d = buffer[i];
+					            //buffer[i] = (short) ( ((d & 0xff)<<8)  | ((d & 0xff00)>>8)) ;
 			                    dos.writeShort(buffer[i]);
+					               //Log.i(TAG, "input: " + Short.toString(buffer[i]));
 			                }
 						} catch (IOException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
-	              }
+     	              }
 	              //Log.i(TAG, "proccess_running finish...");
 
 	              publishProgress(new Integer(r));

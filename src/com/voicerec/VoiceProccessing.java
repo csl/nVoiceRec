@@ -31,14 +31,14 @@ public class VoiceProccessing {
 	static int FFT_SIZE2 =	256;		// Data frame size x 2 = FFT size, half overlap
 	static int FFT_SIZE_INDEX = 8;
 	
-	static  double TWOPI = 2* (Math.PI);
+	static double TWOPI = 2* (Math.PI);
 	
 	String TAG = "VoiceRec";
 	
 	int firstset;
 
 	// ------------ User define ----------- //
-	static int SNR_TH = 5;  //0~10
+	static int SNR_TH = 10;  //0~10
 	static int	X_sampling_rate = 8000;
 	
 	static COMPLEX W_FFT[]  = null;
@@ -89,11 +89,11 @@ public class VoiceProccessing {
     	firstset = 1;
 	}
     
-    void FFT(COMPLEX []data)
+    @SuppressWarnings("static-access")
+	void FFT(COMPLEX []data)
     {
     	int i,j,k,l,n1,n2;
     	double c,s,e,a,t1,t2;
-
     	
     	// Bit Reverse
     	j = 0; 
@@ -150,7 +150,8 @@ public class VoiceProccessing {
     {
         int i;
         double t;
-        if ( WL == N ) return true;    
+        if ( WL == N ) return true; 
+        
     	//if ( W_FFT != null ) delete [] W_FFT;
         W_FFT = new COMPLEX[N];
     	for(i=0; i<N; i++)
@@ -177,7 +178,7 @@ public class VoiceProccessing {
     //*****************************************//
     // Function: IFFT
     //*****************************************//
-    void IFFT(COMPLEX []xin,int N)
+    void IFFT(COMPLEX []xin, int N)
     {
         int LH,m,i,j,l,le,B,ip,w_index;
         COMPLEX t1 = new COMPLEX(), t2 = new COMPLEX();
@@ -186,38 +187,50 @@ public class VoiceProccessing {
 
         l=N;
         m=0;
-        while (l == 0)
+        while (true)
         {
         	l>>=1;
+            if (l == 0) break;
             m++;
         }
-        	
-
+        
         for (l=m;l>=1;l--)
         {
-            le = (int)(1<<l);
+            le = (int) (1<<l);
             B = (le>>1);
+            
             for (j=0;j<=B-1;j++)
             {
                 w_index = (1<<(m-l))*j;
-                for (i=j;i<=N-1;i=i+le)
+                for (i=j; i<=N-1;i=i+ le)
                 {
                     ip=i+B;
                     t1.real=(xin[i].real+xin[ip].real);
                     t1.image=(xin[i].image+xin[ip].image);
                     t2.real=(xin[i].real-xin[ip].real);
                     t2.image=(xin[i].image-xin[ip].image);
+                    
                     xin[ip].real=t2.real*W_FFT[w_index].real+t2.image*W_FFT[w_index].image;
                     xin[ip].image=t2.image*W_FFT[w_index].real-t2.real*W_FFT[w_index].image;
-                    xin[i]=t1;
+                    xin[i].real=t1.real;
+                    xin[i].image=t1.image;
                 }
             }
         }
-
+        
         /* output reverse */
-        for (LH=j=N>>1, i=1, m=N-2; i<=m; i++)
+        for (LH=N>>1, j=N>>1, i=1, m=N-2; i<=m; i++)
         {
-            if (i<j){t1=xin[j]; xin[j]=xin[i]; xin[i]=t1;}
+            if (i<j){
+            	t1.real=xin[j].real;
+            	t1.image=xin[j].image;
+            	
+            	xin[j].real=xin[i].real; 
+            	xin[j].image=xin[i].image; 
+
+            	xin[i].real=t1.real;
+            	xin[i].image=t1.image;
+            }
             l=LH;
             while (j>=l){j-=l; l>>=1;}
             j+=l;
@@ -226,10 +239,8 @@ public class VoiceProccessing {
         /* scale output */
         for (i=0; i<N; i++)
         {
-              
-            //Log.i(TAG, "IFFT: " + i + "," + Double.toString(xin[i].real) + "," + Double.toString(xin[i].image));  
-            xin[i].real/=N;
-            xin[i].image/=N;
+            xin[i].real= (double) xin[i].real /N;
+            xin[i].image= (double) xin[i].image /N;
         }
     }
     
@@ -248,8 +259,6 @@ public class VoiceProccessing {
     	double S_min_D[] = new double[FFT_SIZE+1];
     	double PostSNR[] = new double[FFT_SIZE+1];
     	double PriSNR[] = new double[FFT_SIZE+1];
-    	
-    	
     	double Gain[] =  new double[FFT_SIZE+1];
     	
 
@@ -269,15 +278,16 @@ public class VoiceProccessing {
     	Log.i(TAG, "before FFT..." + ch_f[0].real);
         // FFT 
     	FFT(ch_f);
-
     	Log.i(TAG, "after FFT..."  + ch_f[0].real);
- 
+    	
+    	//for(i=0; i<FFT_SIZE2; i++)
+        	//Log.i(TAG,  i + " ," + Double.toString(ch_f[i].real) + "," + Double.toString(ch_f[i].image));
+
     	// Estimate P_D
     	if(FrameCnt < SetFrame)
     	{	for(i=0;i<FFT_SIZE+1;i++)
     		{	
         		//Log.i(TAG,  i + "," + Double.toString(ch_f[i].real) + "," + Double.toString(ch_f[i].image));
-
     			temp_reg = ch_f[i].real*ch_f[i].real + ch_f[i].image*ch_f[i].image;
     			P_D[i] = temp_reg;
     			P_D_1[i] = temp_reg;
@@ -287,8 +297,6 @@ public class VoiceProccessing {
     	{
     		for(i=0;i<FFT_SIZE+1;i++)
     		{
-        		//Log.i(TAG,  i + "," + Double.toString(ch_f[i].real) + "," + Double.toString(ch_f[i].image));
-    			
     			temp_reg = ch_f[i].real*ch_f[i].real + ch_f[i].image*ch_f[i].image;
     			P_D_1[i] = P_D[i];
     			P_D[i] = alphar_PSD*P_D[i] + (1-alphar_PSD)*temp_reg;
@@ -352,22 +360,21 @@ public class VoiceProccessing {
     	}
     	
     	Log.i(TAG, "Before IFFT...");
-    	
+
     	// IFFT
      	IFFT(TmpOut, FFT_SIZE2);  
 	
     	// Overlap half frame
         for(i=0;i<FFT_SIZE;i++) 
     	{   
-        	//Log.i(TAG,  i + " ," + Double.toString(ch_f[i].real) + "," + Short.toString(Overlap[i]));
-        	result[i] = (short)(TmpOut[i].real+Overlap[i]);
+        	result[i] = (short)(TmpOut[i].real + Overlap[i]);
             Overlap[i] = (short)TmpOut[i+FFT_SIZE].real;
+    		//Log.i(TAG,  i + "," + TmpOut[i].real + "," + TmpOut[i].image);
+    		//Log.i(TAG,  i + "," + Overlap[i]);
     	}
 
     	if(FrameCnt<SetFrame)
     		FrameCnt++;  
-    	
-    	
     } 
     
     public void proccess_running(short[] voice_data, int Sizes, DataOutputStream dos)
@@ -376,7 +383,6 @@ public class VoiceProccessing {
     	short ch[] = new short[FFT_SIZE2];
 
     	Log.i(TAG, "proccess_running...");
-    	
     	for (int i=0; i<voice_data.length; i+=FFT_SIZE)
 		{	
     		
@@ -411,12 +417,11 @@ public class VoiceProccessing {
 
 		
 			// STFT process
-			//memcpy(&ch[0],InOverlap,CpySize);
-			//memcpy(&ch[FFT_SIZE],InData,CpySize);
 	
 			int count=0;
 			int j;
 			
+			//memcpy(&ch[0],InOverlap,CpySize);
 			for (j=0; j<FFT_SIZE; j++)
 			{
 				ch[j] = InOverlap[count];
@@ -425,8 +430,7 @@ public class VoiceProccessing {
 				//Log.i(TAG, "InOverlap input: " + ch[j]);
 			}
 			
-			//	ch[j] = InData[count];
-			
+			//memcpy(&ch[FFT_SIZE],InData,CpySize);
 			count=0;
 			for (j=FFT_SIZE; j<FFT_SIZE2; j++)
 			{
@@ -451,6 +455,9 @@ public class VoiceProccessing {
 			{
 				try {
 					//Log.i(TAG, Short.toString(result[k]));
+		            //short d = result[k];
+		            //result[k] = (short) (((d & 0xff)<<8)  | ((d & 0xff00)>>8)) ;          						          
+					
 					dos.writeShort(result[k]);
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
